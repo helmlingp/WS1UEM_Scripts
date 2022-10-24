@@ -302,40 +302,43 @@ function Invoke-CreateSG {
     [Parameter(Mandatory=$true)][string]$UserGroupid
   )
 
-  $json = [ordered]@{
-    Name= $newSG
-    CriteriaType= "All"
-    ManagedByOrganizationGroupId= $managedbyOGid
-    OrganizationGroups= @(
-        @{
-            Name= $OGName
-            Id= $groupid
-            Uuid= $groupuuid
-          }
-        )
-    UserGroups= @(
-        @{
-            Name= $UserGroup
-            Id= $UserGroupid
-          }
-    )
-    Tags= @()
-    Ownerships= @(
-      "allownerships"
-    )
-    Platforms= @()
-    Models= @()
-    OperatingSystems= @()
-    UserAdditions= @()
-    DeviceAdditions= @()
-    UserExclusions= @()
-    DeviceExclusions= @()
-    UserGroupExclusions= @()
-    ManagementTypes= @()
-    EnrollmentCategories= @()
-    OEMAndModels= @()
-    CPUArchitectures= @()
-  }
+  $json = @"
+{
+  Name= $newSG
+  CriteriaType= "All"
+  ManagedByOrganizationGroupId= $managedbyOGid
+  OrganizationGroups= @(
+      @{
+          Name= $OGName
+          Id= $groupid
+          Uuid= $groupuuid
+        }
+      )
+  UserGroups= @(
+      @{
+          Name= $UserGroup
+          Id= $UserGroupid
+        }
+  )
+  Tags= @()
+  Ownerships= @(
+    "allownerships"
+  )
+  Platforms= @()
+  Models= @()
+  OperatingSystems= @()
+  UserAdditions= @()
+  DeviceAdditions= @()
+  UserExclusions= @()
+  DeviceExclusions= @()
+  UserGroupExclusions= @()
+  ManagementTypes= @()
+  EnrollmentCategories= @()
+  OEMAndModels= @()
+  CPUArchitectures= @()
+}
+"@
+  
 
   $body = ConvertTo-Json -InputObject $json -Depth 100
   $url = "$server/api/mdm/smartgroups"
@@ -349,7 +352,6 @@ function Invoke-CreateSG {
   }
   return $SmartGroups  
 }
-
 
 function Main {
   if ([string]::IsNullOrEmpty($file)){

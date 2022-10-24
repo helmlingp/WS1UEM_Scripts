@@ -214,34 +214,36 @@ function Invoke-CreateSG {
     [Parameter(Mandatory=$true)][string]$UserGroupid
   )
   Write-Log2 -Path $logLocation -Message "Creating Smart Group $newSG in $managedbyOGid OG" -Level Info
+
   $json = [ordered]@{
-  Name= $newSG
-  CriteriaType= "All"
-  ManagedByOrganizationGroupId= $managedbyOGid
-  UserGroups= @(
-      @{
-          Name= $UserGroup
-          Id= $UserGroupid
-        }
-  )
-  Tags= @()
-  Ownerships= @(
-    "allownerships"
-  )
-  Platforms= @()
-  Models= @()
-  OperatingSystems= @()
-  UserAdditions= @()
-  DeviceAdditions= @()
-  UserExclusions= @()
-  DeviceExclusions= @()
-  UserGroupExclusions= @()
-  ManagementTypes= @()
-  EnrollmentCategories= @()
-  OEMAndModels= @()
-  CPUArchitectures= @()
-}
-  $body = ConvertTo-Json -InputObject $json -Depth 100
+    Name= "$newSG"
+    CriteriaType= "All"
+    ManagedByOrganizationGroupId= "$managedbyOGid"
+    OrganizationGroups= @()
+    UserGroups= @(
+        @{
+            Name="$UserGroup"
+            Id= "$UserGroupid"
+          }
+    )
+    Tags= @()
+    Ownerships= @(
+      "allownerships"
+    )
+    Platforms= @()
+    Models= @()
+    OperatingSystems= @()
+    UserAdditions= @()
+    DeviceAdditions= @()
+    UserExclusions= @()
+    DeviceExclusions= @()
+    UserGroupExclusions= @()
+    ManagementTypes= @()
+    EnrollmentCategories= @()
+    OEMAndModels= @()
+    CPUArchitectures= @()
+  }
+  $body = ConvertTo-Json -InputObject $json -Depth 100 -EscapeHandling EscapeNonAscii
   $url = "$server/api/mdm/smartgroups"
   $header = @{'aw-tenant-code' = $APIKey;'Authorization' = $cred;'accept' = 'application/json;version=1';'Content-Type' = 'application/json'}
   try {
