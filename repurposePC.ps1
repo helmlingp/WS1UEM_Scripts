@@ -10,7 +10,6 @@
 # Execution Architecture: EITHER64OR32BIT
 # Timeout: 30
 # Variables: username,STAGINGUSERNAME; password,STAGINGPASSWORD; OGName,OGNAME; Server,DS_FQDN; Download,true/false
-
 $Username=$env:username
 $password= $env:password
 $OGName=$env:OGName
@@ -30,6 +29,7 @@ $DateNow = Get-Date -Format "yyyyMMdd_hhmm"
 $scriptName = $MyInvocation.MyCommand.Name
 $scriptBaseName = (Get-Item $scriptName).Basename
 $logLocation = "$current_path"+"$delimiter"+"$scriptBaseName"+"_$DateNow.log"
+$TaskName = "$scriptBaseName"
 
 if($Debug){
   write-host "Current Path: $current_path"
@@ -57,12 +57,20 @@ function Write-Log2{
     Write-Host "$DateNow::$Level`t$Message" -ForegroundColor $FontColor;
 }
 
+function Invoke-GetTask{
+    #Look for task and delete if already exists
+    if(Get-ScheduledTask -TaskName $scriptBaseName -ErrorAction SilentlyContinue){
+        Unregister-ScheduledTask -InputObject $task -Confirm:$false
+    }
+}
+
 function Invoke-CreateTask{
     #Get Current time to set Scheduled Task to run powershell
     $DateTime = (Get-Date).AddMinutes(5).ToString("HH:mm")
     $arg = "-ep Bypass -File $deploypathscriptName -username $username -password $password -Server $Server -OGName $OGName"
-    
+
     $TaskName = "$scriptBaseName"
+
     Try{
         $A = New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe" -Argument $arg 
         $T = New-ScheduledTaskTrigger -AtLogOn -RandomDelay "00:05"
@@ -71,13 +79,13 @@ function Invoke-CreateTask{
         $S.CimInstanceProperties['MultipleInstances'].Value=3
         $D = New-ScheduledTask -Action $A -Principal $P -Trigger $T -Settings $S
 
-        Register-ScheduledTask -InputObject $D -TaskName $
-         -Force -ErrorAction Stop
+        Register-ScheduledTask -InputObject $D -TaskName $TaskName -Force -ErrorAction Stop
         Write-Log2 -Path "$logLocation" -Message "Create Task $Taskname" -Level Info
     } Catch {
         Write-Log2 -Path "$logLocation" -Message "Error: Job creation failed.  Validate user rights." -Level Info
     }
 }
+
 function Build-repurposeScript {
     $repurposeScript = @'
     <#
@@ -571,16 +579,21 @@ function Main {
         #Download AirwatchAgent.msi if -Download switch used, otherwise requires AirwatchAgent.msi to be deployed in the ZIP.
         Invoke-DownloadAirwatchAgent
         Start-Sleep -Seconds 10
-    } 
-    Copy-Item -Path "$current_path\$agent" -Destination "$agentpath\$agent" -Force
-    Write-Log2 -Path "$logLocation" -Message "Copied Agent $agent" -Level Info
+    }
+    if(Test-Path -Path "$agentpath\$agent" -PathType Leaf){
+        Copy-Item -Path "$current_path\$agent" -Destination "$agentpath\$agent" -Force
+        Write-Log2 -Path "$logLocation" -Message "Copied Agent $agent" -Level Info
+    }
 
     #Create migration script to be run by Scheduled Task
     $repurposeScript = Build-repurposeScript
-	New-Item -Path $deploypathscriptName -ItemType "file" -Value $repurposeScript -Force -Confirm:$false
-	Write-Log2 -Path "$logLocation" -Message "Created script $deploypathscriptName" -Level Info
+    New-Item -Path $deploypathscriptName -ItemType "file" -Value $repurposeScript -Force -Confirm:$false
+    if(Test-Path -Path $deploypathscriptName -PathType Leaf){
+        Write-Log2 -Path "$logLocation" -Message "Created script $deploypathscriptName" -Level Info
+    }
 
     #Create Scheduled Task to run the main program on next logon
+    Invoke-GetTask
     Invoke-CreateTask
     Write-Log2 -Path "$logLocation" -Message "Created Task set to run approx 5 minutes after next logon" -Level Info
 }
