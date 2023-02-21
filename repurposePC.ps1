@@ -10,37 +10,6 @@
 # Execution Architecture: EITHER64OR32BIT
 # Timeout: 30
 # Variables: username,STAGINGUSERNAME; password,STAGINGPASSWORD; OGName,OGNAME; Server,DS_FQDN; Download,true/false
-$Username=$env:username
-$password= $env:password
-$OGName=$env:OGName
-$Server=$env:Server
-$Download=$env:Download
-
-#Enable Debug Logging
-$Debug = $false
-
-$current_path = $PSScriptRoot;
-if($PSScriptRoot -eq ""){
-    #PSScriptRoot only popuates if the script is being run.  Default to default location if empty
-    $current_path = Get-Location
-} 
-if($IsMacOS -or $IsLinux){$delimiter = "/"}else{$delimiter = "\"}
-$DateNow = Get-Date -Format "yyyyMMdd_hhmm"
-$scriptName = $MyInvocation.MyCommand.Name
-$scriptBaseName = (Get-Item $scriptName).Basename
-$logLocation = "$current_path"+"$delimiter"+"$scriptBaseName"+"_$DateNow.log"
-$TaskName = "$scriptBaseName"
-
-if($Debug){
-  write-host "Current Path: $current_path"
-  write-host "LogLocation: $LogLocation"
-}
-
-$deploypath = "C:\Recovery\OEM\$scriptBaseName"
-$deploypathscriptName = "$deploypath"+"$delimiter"+"$scriptName"
-$agentpath = "C:\Recovery\OEM"
-$agent = "AirwatchAgent.msi"
-
 function Write-Log2{
     [CmdletBinding()]
     Param(
@@ -57,6 +26,20 @@ function Write-Log2{
     Write-Host "$DateNow::$Level`t$Message" -ForegroundColor $FontColor;
 }
 
+function Invoke-DownloadAirwatchAgent {
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = 'Tls11,Tls12'
+        $url = "https://packages.vmware.com/wsone/AirwatchAgent.msi"
+        $output = "$current_path\$agent"
+        $Response = Invoke-WebRequest -Uri $url -OutFile $output
+        # This will only execute if the Invoke-WebRequest is successful.
+        $StatusCode = $Response.StatusCode
+    } catch {
+        $StatusCode = $_.Exception.Response.StatusCode.value__
+        Write-Log2 -Path "$logLocation" -Message "Failed to download AirwatchAgent.msi with StatusCode $StatusCode" -Level Error
+    }
+}
+
 function Invoke-GetTask{
     #Look for task and delete if already exists
     if(Get-ScheduledTask -TaskName $scriptBaseName -ErrorAction SilentlyContinue){
@@ -69,7 +52,7 @@ function Invoke-CreateTask{
     $DateTime = (Get-Date).AddMinutes(5).ToString("HH:mm")
     $arg = "-ep Bypass -File $deploypathscriptName -username $username -password $password -Server $Server -OGName $OGName"
 
-    $TaskName = "$scriptBaseName"
+    #$TaskName = "$scriptBaseName"
 
     Try{
         $A = New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe" -Argument $arg 
@@ -546,20 +529,7 @@ function Build-repurposeScript {
 '@
     return $repurposeScript
 }
-function Invoke-DownloadAirwatchAgent {
-    try {
-        [Net.ServicePointManager]::SecurityProtocol = 'Tls11,Tls12'
-        $url = "https://packages.vmware.com/wsone/AirwatchAgent.msi"
-        $output = "$current_path\$agent"
-        $Response = Invoke-WebRequest -Uri $url -OutFile $output
-        # This will only execute if the Invoke-WebRequest is successful.
-        $StatusCode = $Response.StatusCode
-    } catch {
-        $StatusCode = $_.Exception.Response.StatusCode.value__
-        Write-Log2 -Path "$logLocation" -Message "Failed to download AirwatchAgent.msi with StatusCode $StatusCode" -Level Error
-    }
-}
-  
+
 function Main {
     #Setup Logging
     Write-Log2 -Path "$logLocation" -Message "Setup Logging" -Level Success
@@ -579,10 +549,14 @@ function Main {
         #Download AirwatchAgent.msi if -Download switch used, otherwise requires AirwatchAgent.msi to be deployed in the ZIP.
         Invoke-DownloadAirwatchAgent
         Start-Sleep -Seconds 10
+    } else {
+        Write-Log2 -Path "$logLocation" -Message "Please specify -Download parameter to download the latest AirwatchAgent.msi" -Level Error
     }
     if(Test-Path -Path "$agentpath\$agent" -PathType Leaf){
         Copy-Item -Path "$current_path\$agent" -Destination "$agentpath\$agent" -Force
-        Write-Log2 -Path "$logLocation" -Message "Copied Agent $agent" -Level Info
+        Write-Log2 -Path "$logLocation" -Message "Copied $agent to $agentpath" -Level Info
+    } else {
+        Write-Log2 -Path "$logLocation" -Message "Agent not available to copy to $agentpath" -Level Info
     }
 
     #Create migration script to be run by Scheduled Task
@@ -597,5 +571,37 @@ function Main {
     Invoke-CreateTask
     Write-Log2 -Path "$logLocation" -Message "Created Task set to run approx 5 minutes after next logon" -Level Info
 }
+
+$Username=$env:username
+$password= $env:password
+$OGName=$env:OGName
+$Server=$env:Server
+$Download=$env:Download
+
+#Enable Debug Logging
+$Debug = $false
+
+$current_path = $PSScriptRoot;
+if($PSScriptRoot -eq ""){
+    #PSScriptRoot only popuates if the script is being run.  Default to default location if empty
+    $current_path = Get-Location
+} 
+if($IsMacOS -or $IsLinux){$delimiter = "/"}else{$delimiter = "\"}
+$DateNow = Get-Date -Format "yyyyMMdd_hhmm"
+$scriptName = $MyInvocation.MyCommand.Name
+$scriptBaseName = (Get-Item $scriptName).Basename
+$logLocation = "$current_path"+"$delimiter"+"$scriptBaseName"+"_$DateNow.log"
+$TaskName = "$scriptBaseName"
+
+$deploypath = "C:\Recovery\OEM\$scriptBaseName"
+$deploypathscriptName = "$deploypath\$scriptName"
+$agentpath = "C:\Recovery\OEM"
+$agent = "AirwatchAgent.msi"
+
+if($Debug){
+    write-host "Current Path: $current_path"
+    write-host "LogLocation: $LogLocation"
+  }
+  
 #Call Main function
 Main
