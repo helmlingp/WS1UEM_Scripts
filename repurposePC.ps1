@@ -9,7 +9,7 @@
 # Execution Context: SYSTEM
 # Execution Architecture: EITHER64OR32BIT
 # Timeout: 30
-# Variables: username,STAGINGUSERNAME; password,STAGINGPASSWORD; OGName,OGNAME; Server,DS_FQDN; Download,true/false
+# Variables: StagingUser,STAGINGUSERNAME; StagingUserpassword,STAGINGPASSWORD; OGName,OGNAME; Server,DS_FQDN; Download,true/false
 function Write-Log2{
     [CmdletBinding()]
     Param(
@@ -42,17 +42,15 @@ function Invoke-DownloadAirwatchAgent {
 
 function Invoke-GetTask{
     #Look for task and delete if already exists
-    if(Get-ScheduledTask -TaskName $scriptBaseName -ErrorAction SilentlyContinue){
-        Unregister-ScheduledTask -InputObject $task -Confirm:$false
+    if(Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue){
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
     }
 }
 
 function Invoke-CreateTask{
     #Get Current time to set Scheduled Task to run powershell
     $DateTime = (Get-Date).AddMinutes(5).ToString("HH:mm")
-    $arg = "-ep Bypass -File $deploypathscriptName -username $username -password $password -Server $Server -OGName $OGName"
-
-    #$TaskName = "$scriptBaseName"
+    $arg = "-ep Bypass -File $deploypathscriptName -username $StagingUser -password $StagingUserpassword -Server $Server -OGName $OGName"
 
     Try{
         $A = New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe" -Argument $arg 
@@ -98,7 +96,7 @@ function Build-repurposeScript {
       Requires AirWatchAgent.msi in the C:\Recovery\OEM folder
       Goto https://getwsone.com to download or goto https://<DS_FQDN>/agents/ProtectionAgent_AutoSeed/AirwatchAgent.msi to download it, substituting <DS_FQDN> with the FQDN for the Device Services Server.
       
-      Note: to ensure the device stays encrypted if using an Encryption Profile, ensure “Keep System Encrypted at All Times” is enabled/ticked
+      Note: to ensure the device stays encrypted if using an Encryption Profile, ensure â€œKeep System Encrypted at All Timesâ€ is enabled/ticked
     .EXAMPLE
       .\WS1toWS1Win10Migration.ps1 -username USERNAME -password PASSWORD -Server DESTINATION_SERVER_FQDN -OGName DESTINATION_GROUPID
   #>
@@ -552,7 +550,7 @@ function Main {
     } else {
         Write-Log2 -Path "$logLocation" -Message "Please specify -Download parameter to download the latest AirwatchAgent.msi" -Level Error
     }
-    if(Test-Path -Path "$agentpath\$agent" -PathType Leaf){
+    if(!(Test-Path -Path "$agentpath\$agent" -PathType Leaf)){
         Copy-Item -Path "$current_path\$agent" -Destination "$agentpath\$agent" -Force
         Write-Log2 -Path "$logLocation" -Message "Copied $agent to $agentpath" -Level Info
     } else {
@@ -572,10 +570,10 @@ function Main {
     Write-Log2 -Path "$logLocation" -Message "Created Task set to run approx 5 minutes after next logon" -Level Info
 }
 
-$Username=$env:username
-$password= $env:password
+$StagingUser=$env:StagingUser
+$StagingUserpassword=$env:StagingUserpassword
 $OGName=$env:OGName
-$Server=$env:Server
+$Server=$env:server
 $Download=$env:Download
 
 #Enable Debug Logging
