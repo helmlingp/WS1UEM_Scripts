@@ -9,7 +9,7 @@
 # Execution Context: SYSTEM
 # Execution Architecture: EITHER64OR32BIT
 # Timeout: 30
-# Variables: StagingUser,STAGINGUSERNAME; StagingUserpassword,STAGINGPASSWORD; OGName,OGNAME; Server,DS_FQDN; Download,true/false
+# Variables: staginguser,STAGINGUSERNAME; staginguserpassword,STAGINGPASSWORD; OGName,OGNAME; Server,DS_FQDN; Download,true/false
 function Write-Log2{
     [CmdletBinding()]
     Param(
@@ -50,7 +50,9 @@ function Invoke-GetTask{
 function Invoke-CreateTask{
     #Get Current time to set Scheduled Task to run powershell
     $DateTime = (Get-Date).AddMinutes(5).ToString("HH:mm")
-    $arg = "-ep Bypass -File $deploypathscriptName -username $StagingUser -password $StagingUserpassword -Server $Server -OGName $OGName"
+    $arg = "-ep Bypass -File $deploypathscriptName -username $staginguser -password $staginguserpassword -Server $Server -OGName $OGName"
+
+    #$TaskName = "$scriptBaseName"
 
     Try{
         $A = New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe" -Argument $arg 
@@ -551,6 +553,7 @@ function Main {
         Write-Log2 -Path "$logLocation" -Message "Please specify -Download parameter to download the latest AirwatchAgent.msi" -Level Error
     }
     if(!(Test-Path -Path "$agentpath\$agent" -PathType Leaf)){
+    if(!(Test-Path -Path "$agentpath\$agent" -PathType Leaf)){
         Copy-Item -Path "$current_path\$agent" -Destination "$agentpath\$agent" -Force
         Write-Log2 -Path "$logLocation" -Message "Copied $agent to $agentpath" -Level Info
     } else {
@@ -570,8 +573,8 @@ function Main {
     Write-Log2 -Path "$logLocation" -Message "Created Task set to run approx 5 minutes after next logon" -Level Info
 }
 
-$StagingUser=$env:StagingUser
-$StagingUserpassword=$env:StagingUserpassword
+$Username=$env:staginguser
+$password= $env:staginguserpassword
 $OGName=$env:OGName
 $Server=$env:server
 $Download=$env:Download
