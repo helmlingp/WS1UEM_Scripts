@@ -26,6 +26,39 @@ function Write-Log2{
     Write-Host "$DateNow::$Level`t$Message" -ForegroundColor $FontColor;
 }
 
+function Invoke-SetupPSEXEC {
+    #First check if PSEXEC is already on the device
+    $psexec = Get-Childitem -Path C:\ -Include psexec.exe -Recurse -ErrorAction SilentlyContinue
+
+    If ($psexec){
+        $path = $psexec.FullName
+
+        for ($i=0; $i -lt $path.length; $i++){
+            $list += $path[$i] + ","
+        }
+    } else {
+        #download PSEXEC
+        try {
+            [Net.ServicePointManager]::SecurityProtocol = 'Tls11,Tls12'
+            $url = "https://download.sysinternals.com/files/PSTools.zip"
+            $path = "$current_path\PSTools.zip"
+            $Response = Invoke-WebRequest -Uri $url -OutFile $path
+            # This will only execute if the Invoke-WebRequest is successful.
+            $StatusCode = $Response.StatusCode
+            Expand-Archive -LiteralPath $output -DestinationPath "$current_path\PSTools"
+        } catch {
+            $StatusCode = $_.Exception.Response.StatusCode.value__
+            Write-Log2 -Path "$logLocation" -Message "Failed to download PSTools.zip with StatusCode $StatusCode" -Level Error
+        }
+        Copy-Item -LiteralPath "$current_path\PSTools" -Destination $deploypath
+        $path = Get-ChildItem -Path "$deploypath" -Include psexec.exe -Recurse -ErrorAction SilentlyContinue
+        
+    }
+    #run PSEXEC to accept the EULA and ensure it is "installed"
+    Start-Process $path -ArgumentList "-accepteula","-nobanner"
+    return $path
+}
+
 function Invoke-DownloadAirwatchAgent {
     try {
         [Net.ServicePointManager]::SecurityProtocol = 'Tls11,Tls12'
@@ -50,12 +83,12 @@ function Invoke-GetTask{
 function Invoke-CreateTask{
     #Get Current time to set Scheduled Task to run powershell
     $DateTime = (Get-Date).AddMinutes(5).ToString("HH:mm")
-    $arg = "-ep Bypass -File $deploypathscriptName -username $staginguser -password $staginguserpassword -Server $Server -OGName $OGName"
-
+    $arg = "-s -e C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe -ep Bypass -File $deploypathscriptName -username $staginguser -password $staginguserpassword -Server $Server -OGName $OGName"
+	if($Debug){write-host $arg}
     #$TaskName = "$scriptBaseName"
 
     Try{
-        $A = New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe" -Argument $arg 
+        $A = New-ScheduledTaskAction -Execute "$psexec" -Argument $arg 
         $T = New-ScheduledTaskTrigger -AtLogOn -RandomDelay "00:05"
         $P = New-ScheduledTaskPrincipal "System" -RunLevel Highest
         $S = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -StartWhenAvailable -Priority 5
@@ -98,7 +131,7 @@ function Build-repurposeScript {
       Requires AirWatchAgent.msi in the C:\Recovery\OEM folder
       Goto https://getwsone.com to download or goto https://<DS_FQDN>/agents/ProtectionAgent_AutoSeed/AirwatchAgent.msi to download it, substituting <DS_FQDN> with the FQDN for the Device Services Server.
       
-      Note: to ensure the device stays encrypted if using an Encryption Profile, ensure â€œKeep System Encrypted at All Timesâ€ is enabled/ticked
+      Note: to ensure the device stays encrypted if using an Encryption Profile, ensure "Keep System Encrypted at All Times" is enabled/ticked
     .EXAMPLE
       .\WS1toWS1Win10Migration.ps1 -username USERNAME -password PASSWORD -Server DESTINATION_SERVER_FQDN -OGName DESTINATION_GROUPID
   #>
@@ -544,20 +577,32 @@ function Main {
         "Successfully created directory '$deploypath'."
     }
 
+    #Setup PSEXEC as it calls the powershell script in order to bypass UAC
+    $psexec = Invoke-SetupPSEXEC
+
     #Download latest AirwatchAgent.msi
     if($Download){
-        #Download AirwatchAgent.msi if -Download switch used, otherwise requires AirwatchAgent.msi to be deployed in the ZIP.
+        #Download AirwatchAgent.msi if -Download variable used, otherwise requires AirwatchAgent.msi to exist in the current directory or in the C:\Recovery\OEM folder.
         Invoke-DownloadAirwatchAgent
-        Start-Sleep -Seconds 10
+        Start-Sleep -Seconds 2
+        if(Test-Path -Path "$current_path\$agent" -PathType Leaf){
+            Copy-Item -Path "$current_path\$agent" -Destination "$agentpath\$agent" -Force
+            Write-Log2 -Path "$logLocation" -Message "Copied $agent to $agentpath" -Level Info
+        } else {
+            Write-Log2 -Path "$logLocation" -Message "Agent not able to be copied to $agentpath" -Level Info
+        }
     } else {
-        Write-Log2 -Path "$logLocation" -Message "Please specify -Download parameter to download the latest AirwatchAgent.msi" -Level Error
-    }
-    if(!(Test-Path -Path "$agentpath\$agent" -PathType Leaf)){
-    if(!(Test-Path -Path "$agentpath\$agent" -PathType Leaf)){
-        Copy-Item -Path "$current_path\$agent" -Destination "$agentpath\$agent" -Force
-        Write-Log2 -Path "$logLocation" -Message "Copied $agent to $agentpath" -Level Info
-    } else {
-        Write-Log2 -Path "$logLocation" -Message "Agent not available to copy to $agentpath" -Level Info
+		#If Download variable not specified, and agent doesn't exist in the destination, look to copy from current folder.
+        if(!(Test-Path -Path "$agentpath\$agent" -PathType Leaf)){
+            if(Test-Path -Path "$current_path\$agent" -PathType Leaf){
+                Copy-Item -Path "$current_path\$agent" -Destination "$agentpath\$agent" -Force
+                Write-Log2 -Path "$logLocation" -Message "Copied $agent to $agentpath" -Level Info
+            } else {
+                Write-Log2 -Path "$logLocation" -Message "Please specify -Download parameter to download the latest AirwatchAgent.msi" -Level Error
+            }
+        } else {
+            Write-Log2 -Path "$logLocation" -Message "Please specify -Download parameter to download the latest AirwatchAgent.msi" -Level Error
+        }
     }
 
     #Create migration script to be run by Scheduled Task
@@ -573,8 +618,8 @@ function Main {
     Write-Log2 -Path "$logLocation" -Message "Created Task set to run approx 5 minutes after next logon" -Level Info
 }
 
-$Username=$env:staginguser
-$password= $env:staginguserpassword
+$staginguser=$env:staginguser
+$staginguserpassword=$env:staginguserpassword
 $OGName=$env:OGName
 $Server=$env:server
 $Download=$env:Download
