@@ -25,8 +25,8 @@
 
     CSV Example
     Device,Serial,OGName,Type,Staging
-    win10001,823972,TESTOG,CS,staging@TESTOG.com
-    win10002,833972,TESTOG,CD,staging@TESTOG.com
+    win10001,823972,TESTOG,CS,stagingTESTOG
+    win10002,833972,TESTOG,CD,stagingTESTOG
     win10003,843972,TESTOG,EO,BYOUser1
 #>
 param (
