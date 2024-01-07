@@ -210,20 +210,17 @@ function Main {
     $Staging = $_.Staging
 
     #Set device type
-    if($Type -eq "CS") {
-      $ownership_type = "CORPORATE_SHARED"
-    } elseif($Type -eq "CD") {
-      $ownership_type = "CORPORATE_DEDICATED"
-    } elseif($Type -eq "EO") {
-      $ownership_type = "EMPLOYEE_OWNED"
-    } else {
-      $ownership_type = ""
+    switch ($Type) {
+      "CS" { $ownership_type = "CORPORATE_SHARED" }
+      "CD" { $ownership_type = "CORPORATE_DEDICATED" }
+      "EO" { $ownership_type = "EMPLOYEE_OWNED" }
+      Default { $ownership_type = "" }
     }
-    
+
     #get OG
     $getOG = Invoke-GetOG -OGName $OGName
     $groupuuid = $getOG.Uuid
-    $groupid = $getOG.Id
+    #$groupid = $getOG.Id
 
     #get user UUID
     $getuserUUID = Invoke-GetUserUUID -Staging $Staging
